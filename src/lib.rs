@@ -255,7 +255,7 @@ There is also a [`Coroutine`](trait.Coroutine.html) trait, which does not come f
 stdlib. A `Coroutine` is a generalization of a `Generator`. A `Generator` constrains the
 resume argument type to `()`, but in a `Coroutine` it can be anything.
 */
-
+#![no_std]
 #![cfg_attr(feature = "nightly", feature(async_closure))]
 #![warn(future_incompatible, rust_2018_compatibility, rust_2018_idioms, unused)]
 #![warn(missing_docs, clippy::cargo, clippy::pedantic)]
@@ -265,9 +265,6 @@ resume argument type to `()`, but in a `Coroutine` it can be anything.
 extern crate self as genawaiter;
 
 pub use crate::ops::{Coroutine, Generator, GeneratorState};
-
-#[cfg(feature = "proc_macro")]
-use proc_macro_hack::proc_macro_hack;
 
 /// Creates a producer for use with [`sync::Gen`].
 ///
@@ -289,9 +286,6 @@ use proc_macro_hack::proc_macro_hack;
 /// let mut my_generator = Gen::new(my_producer);
 /// # my_generator.resume();
 /// ```
-#[cfg(feature = "proc_macro")]
-#[proc_macro_hack]
-pub use genawaiter_proc_macro::sync_producer;
 
 /// Creates a producer for use with [`rc::Gen`].
 ///
@@ -313,23 +307,15 @@ pub use genawaiter_proc_macro::sync_producer;
 /// let mut my_generator = Gen::new(my_producer);
 /// # my_generator.resume();
 /// ```
-#[cfg(feature = "proc_macro")]
-#[proc_macro_hack]
-pub use genawaiter_proc_macro::rc_producer;
 
-#[doc(hidden)] // This is not quite usable currently, so hide it for now.
-#[cfg(feature = "proc_macro")]
-#[proc_macro_hack]
-pub use genawaiter_proc_macro::stack_producer;
+
 
 mod core;
 mod ext;
-#[macro_use]
-mod macros;
 mod ops;
-pub mod rc;
+//pub mod rc;
 pub mod stack;
-pub mod sync;
+//pub mod sync;
 #[cfg(test)]
 mod testing;
 mod waker;

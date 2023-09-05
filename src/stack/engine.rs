@@ -1,5 +1,5 @@
+use ::core::{cell::UnsafeCell, ptr};
 use crate::{core, core::Next};
-use std::{cell::UnsafeCell, ptr};
 
 /// This type holds the value that is pending being returned from the generator.
 ///

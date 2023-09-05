@@ -1,8 +1,10 @@
 use crate::{ops::GeneratorState, waker};
-use std::{
+use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
+    unreachable,
+    panic
 };
 
 pub enum Next<Y, R> {

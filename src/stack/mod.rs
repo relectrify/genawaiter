@@ -276,8 +276,7 @@ pub use crate::stack::{
 /// # Examples
 ///
 /// [_See the module-level docs for examples._](.)
-#[cfg(feature = "proc_macro")]
-pub use genawaiter_macro::stack_let_gen as let_gen;
+
 
 /// Creates a generator using a producer defined elsewhere.
 ///
@@ -313,7 +312,7 @@ pub use genawaiter_macro::stack_let_gen as let_gen;
 /// # Examples
 ///
 /// [_See the module-level docs for examples._](.)
-pub use genawaiter_macro::stack_let_gen_using as let_gen_using;
+//pub use genawaiter_macro::stack_let_gen_using as let_gen_using;
 
 /// Turns a function into a producer, which can then be used to create a
 /// generator.
@@ -323,154 +322,8 @@ pub use genawaiter_macro::stack_let_gen_using as let_gen_using;
 /// # Examples
 ///
 /// [_See the module-level docs for examples._](.)
-#[cfg(feature = "proc_macro")]
-pub use genawaiter_proc_macro::stack_producer_fn as producer_fn;
 
-#[macro_use]
-mod macros;
 mod engine;
 mod generator;
 mod iterator;
-#[cfg(feature = "futures03")]
-mod stream;
 
-#[cfg(feature = "nightly")]
-#[cfg(test)]
-mod nightly_tests;
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        stack::{let_gen_using, Co},
-        testing::DummyFuture,
-        GeneratorState,
-    };
-    use std::{
-        cell::RefCell,
-        sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
-        },
-    };
-
-    async fn simple_producer(mut co: Co<'_, i32>) -> &'static str {
-        co.yield_(10).await;
-        "done"
-    }
-
-    #[test]
-    fn function() {
-        let_gen_using!(gen, simple_producer);
-        assert_eq!(gen.resume(), GeneratorState::Yielded(10));
-        assert_eq!(gen.resume(), GeneratorState::Complete("done"));
-    }
-
-    #[test]
-    fn simple_closure() {
-        async fn gen(i: i32, mut co: Co<'_, i32>) -> &'static str {
-            co.yield_(i * 2).await;
-            "done"
-        }
-
-        let_gen_using!(gen, |co| gen(5, co));
-        assert_eq!(gen.resume(), GeneratorState::Yielded(10));
-        assert_eq!(gen.resume(), GeneratorState::Complete("done"));
-    }
-
-    #[test]
-    fn resume_args() {
-        async fn gen(resumes: &RefCell<Vec<&str>>, mut co: Co<'_, i32, &'static str>) {
-            let resume_arg = co.yield_(10).await;
-            resumes.borrow_mut().push(resume_arg);
-            let resume_arg = co.yield_(20).await;
-            resumes.borrow_mut().push(resume_arg);
-        }
-
-        let resumes = RefCell::new(Vec::new());
-        let_gen_using!(gen, |co| gen(&resumes, co));
-        assert_eq!(*resumes.borrow(), &[] as &[&str]);
-
-        assert_eq!(gen.resume_with("ignored"), GeneratorState::Yielded(10));
-        assert_eq!(*resumes.borrow(), &[] as &[&str]);
-
-        assert_eq!(gen.resume_with("abc"), GeneratorState::Yielded(20));
-        assert_eq!(*resumes.borrow(), &["abc"]);
-
-        assert_eq!(gen.resume_with("def"), GeneratorState::Complete(()));
-        assert_eq!(*resumes.borrow(), &["abc", "def"]);
-    }
-
-    #[test]
-    #[should_panic(expected = "non-async method")]
-    fn forbidden_await_helpful_message() {
-        async fn wrong(_: Co<'_, i32>) {
-            DummyFuture.await;
-        }
-
-        let_gen_using!(gen, wrong);
-        gen.resume();
-    }
-
-    #[test]
-    #[should_panic(expected = "Co::yield_")]
-    fn multiple_yield_helpful_message() {
-        async fn wrong(mut co: Co<'_, i32>) {
-            let _ = co.yield_(10);
-            let _ = co.yield_(20);
-        }
-
-        let_gen_using!(gen, wrong);
-        gen.resume();
-    }
-
-    #[test]
-    #[should_panic = "should have been dropped by now"]
-    fn escaped_co_helpful_message() {
-        async fn shenanigans(co: Co<'_, i32>) -> Co<'_, i32> {
-            co
-        }
-
-        let_gen_using!(gen, shenanigans);
-        let mut escaped_co = match gen.resume() {
-            GeneratorState::Yielded(_) => panic!(),
-            GeneratorState::Complete(co) => co,
-        };
-        let _ = escaped_co.yield_(10);
-    }
-
-    /// Test the unsafe `Gen::drop` implementation.
-    #[test]
-    fn test_gen_drop() {
-        struct SetFlagOnDrop(Arc<AtomicBool>);
-
-        impl Drop for SetFlagOnDrop {
-            fn drop(&mut self) {
-                self.0.store(true, Ordering::SeqCst);
-            }
-        }
-
-        let flag = Arc::new(AtomicBool::new(false));
-        {
-            let capture_the_flag = flag.clone();
-            let_gen_using!(gen, |mut co| {
-                async move {
-                    let _set_on_drop = SetFlagOnDrop(capture_the_flag);
-                    co.yield_(10).await;
-                    // We will never make it this far.
-                    unreachable!();
-                }
-            });
-            assert_eq!(gen.resume(), GeneratorState::Yielded(10));
-            // `gen` is only a reference to the generator, and dropping a reference has
-            // no effect. The underlying generator is hidden behind macro hygiene and so
-            // cannot be dropped early.
-            #[allow(clippy::drop_ref)]
-            drop(gen);
-            assert_eq!(flag.load(Ordering::SeqCst), false);
-        }
-        // After the block above ends, the generator goes out of scope and is dropped,
-        // which drops the incomplete future, which drops `_set_on_drop`, which sets the
-        // flag.
-        assert_eq!(flag.load(Ordering::SeqCst), true);
-    }
-}
